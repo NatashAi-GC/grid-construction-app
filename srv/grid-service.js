@@ -36,6 +36,15 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
+    this.before(['CREATE', 'UPDATE'], MaterialRequests, req => {
+      if (req.data.quantity === undefined || req.data.quantity === null) return
+
+      const quantity = Number(req.data.quantity)
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return req.reject(400, 'Quantity must be greater than 0')
+      }
+    })
+
     // enrich material requests with the current stock from S/4HANA
     this.after('READ', MaterialRequests, async rows => {
       for (const r of Array.isArray(rows) ? rows : [rows]) {
