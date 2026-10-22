@@ -1,6 +1,6 @@
 const cds = require('@sap/cds')
 
-const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 3, COMPLETED: 1 }
+const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 1, COMPLETED: 3 }
 
 module.exports = class GridService extends cds.ApplicationService {
   async init() {
@@ -36,9 +36,16 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
-    // Enrich material requests with the current stock from S/4HANA. Look up all
-    // rows concurrently, and isolate failures so one unauthorized plant does not
-    // prevent the rest of the list from being returned.
+    this.before(['CREATE', 'UPDATE'], MaterialRequests, req => {
+      if (req.data.quantity === undefined || req.data.quantity === null) return
+
+      const quantity = Number(req.data.quantity)
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return req.reject(400, 'Quantity must be greater than 0')
+      }
+    })
+
+    // enrich material requests with the current stock from S/4HANA
     this.after('READ', MaterialRequests, async rows => {
       const requests = Array.isArray(rows) ? rows : [rows]
 
