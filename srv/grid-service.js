@@ -16,6 +16,16 @@ module.exports = class GridService extends cds.ApplicationService {
       }
     })
 
+    this.before(['CREATE', 'UPDATE'], Projects, async req => {
+      const project = req.event === 'UPDATE'
+        ? { ...await db.run(SELECT.one.from(DbProjects, req.data.ID)), ...req.data }
+        : req.data
+
+      if (project.startDate && project.endDate && project.endDate < project.startDate) {
+        req.reject(400, 'The end date must not be before the start date')
+      }
+    })
+
     // keep the project's total hours in sync with its work orders
     this.after(['CREATE', 'UPDATE'], WorkOrders, async wo => {
       const { project_ID } = await db.run(SELECT.one.from(DbWorkOrders, wo.ID).columns('project_ID'))
