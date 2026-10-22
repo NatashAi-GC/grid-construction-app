@@ -16,13 +16,28 @@ module.exports = class GridService extends cds.ApplicationService {
       }
     })
 
-    // keep the project's total hours in sync with its work orders
-    this.after(['CREATE', 'UPDATE'], WorkOrders, async wo => {
-      const { project_ID } = await db.run(SELECT.one.from(DbWorkOrders, wo.ID).columns('project_ID'))
-      if (!project_ID) return
-      await db.run(
-        UPDATE(DbProjects, project_ID).set({ totalActualHours: wo.actualHours })
-      )
+    // keep the project's total hours in sync with all of its work orders
+    this.after(['CREATE', 'UPDATE'], WorkOrders, async changed => {
+      const workOrders = Array.isArray(changed) ? changed : [changed]
+      const projectIds = new Set()
+
+      for (const workOrder of workOrders) {
+        const persisted = await db.run(
+          SELECT.one.from(DbWorkOrders, workOrder.ID).columns('project_ID')
+        )
+        if (persisted?.project_ID) projectIds.add(persisted.project_ID)
+      }
+
+      for (const project_ID of projectIds) {
+        const orders = await db.run(
+          SELECT.from(DbWorkOrders).where({ project_ID }).columns('actualHours')
+        )
+        const totalActualHours = orders.reduce(
+          (total, order) => total + Number(order.actualHours || 0),
+          0
+        )
+        await db.run(UPDATE(DbProjects, project_ID).set({ totalActualHours }))
+      }
     })
 
     this.on('complete', Projects, async req => {
