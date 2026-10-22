@@ -52,3 +52,14 @@ describe('MaterialRequests', () => {
     expect(data.value.find(m => m.plant === '3000').stockStatus).toBe('UNKNOWN')
   })
 })
+
+describe('Search', () => {
+  test('ISSUE-10: search treats input as plain text (no SQL injection)', async () => {
+    const { data } = await GET(`/odata/v4/grid/searchProjects(term='Nordheide')`)
+    expect(data.value).toHaveLength(1)
+    const res = await GET(`/odata/v4/grid/searchProjects(term='zzz'' OR ''1''=''1')`)
+    expect(res.data.value).toHaveLength(0)
+    const quote = await GET(`/odata/v4/grid/searchProjects(term='Rhein''au')`)
+    expect(quote.status).toBe(200)
+  })
+})

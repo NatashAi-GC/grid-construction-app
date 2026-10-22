@@ -51,6 +51,13 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
+    // project search by name
+    this.on('searchProjects', async req => {
+      const { term } = req.data
+      const rows = await db.run(`SELECT * FROM grid_Projects WHERE name LIKE '%${term}%'`)
+      return rows.map(p => ({ ...p, statusCriticality: CRITICALITY[p.status] ?? 0 }))
+    })
+
     this.before(['CREATE', 'UPDATE'], MaterialRequests, req => {
       if (req.data.quantity === undefined || req.data.quantity === null) return
 

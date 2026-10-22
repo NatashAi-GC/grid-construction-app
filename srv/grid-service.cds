@@ -11,4 +11,6 @@ service GridService @(path: '/odata/v4/grid') {
 
   entity WorkOrders as projection on grid.WorkOrders;
   entity MaterialRequests as projection on grid.MaterialRequests;
+
+  function searchProjects(term : String) returns many Projects;
 }
