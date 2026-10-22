@@ -1,6 +1,6 @@
 const cds = require('@sap/cds')
 
-const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 3, COMPLETED: 1 }
+const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 1, COMPLETED: 3 }
 
 module.exports = class GridService extends cds.ApplicationService {
   async init() {
@@ -16,46 +16,73 @@ module.exports = class GridService extends cds.ApplicationService {
       }
     })
 
-    this.before(['CREATE', 'UPDATE'], Projects, async req => {
-      const project = req.event === 'UPDATE'
-        ? { ...await db.run(SELECT.one.from(DbProjects, req.data.ID)), ...req.data }
-        : req.data
+    // keep the project's total hours in sync with all of its work orders
+    this.after(['CREATE', 'UPDATE'], WorkOrders, async changed => {
+      const workOrders = Array.isArray(changed) ? changed : [changed]
+      const projectIds = new Set()
 
-      if (project.startDate && project.endDate && project.endDate < project.startDate) {
-        req.reject(400, 'The end date must not be before the start date')
+      for (const workOrder of workOrders) {
+        const persisted = await db.run(
+          SELECT.one.from(DbWorkOrders, workOrder.ID).columns('project_ID')
+        )
+        if (persisted?.project_ID) projectIds.add(persisted.project_ID)
       }
-    })
 
-    // keep the project's total hours in sync with its work orders
-    this.after(['CREATE', 'UPDATE'], WorkOrders, async wo => {
-      const { project_ID } = await db.run(SELECT.one.from(DbWorkOrders, wo.ID).columns('project_ID'))
-      if (!project_ID) return
-      await db.run(
-        UPDATE(DbProjects, project_ID).set({ totalActualHours: wo.actualHours })
-      )
+      for (const project_ID of projectIds) {
+        const orders = await db.run(
+          SELECT.from(DbWorkOrders).where({ project_ID }).columns('actualHours')
+        )
+        const totalActualHours = orders.reduce(
+          (total, order) => total + Number(order.actualHours || 0),
+          0
+        )
+        await db.run(UPDATE(DbProjects, project_ID).set({ totalActualHours }))
+      }
     })
 
     this.on('complete', Projects, async req => {
       const key = req.params[0]
       const ID = typeof key === 'object' ? key.ID : key
       const orders = await db.run(SELECT.from(DbWorkOrders).where({ project_ID: ID }))
-      if (!orders.some(o => o.status === 'COMPLETED')) {
+      if (orders.length === 0 || orders.some(o => o.status !== 'COMPLETED')) {
         return req.reject(409, 'All work orders must be completed before the project can be completed')
       }
       await db.run(UPDATE(DbProjects, ID).set({ status: 'COMPLETED' }))
       return this.read(Projects, ID)
     })
 
+    this.before(['CREATE', 'UPDATE'], MaterialRequests, req => {
+      if (req.data.quantity === undefined || req.data.quantity === null) return
+
+      const quantity = Number(req.data.quantity)
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return req.reject(400, 'Quantity must be greater than 0')
+      }
+    })
+
     // enrich material requests with the current stock from S/4HANA
     this.after('READ', MaterialRequests, async rows => {
-      for (const r of Array.isArray(rows) ? rows : [rows]) {
-        if (!r?.material || !r.plant) continue
-        const stock = await s4.run(
-          SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
-        )
-        r.availableStock = stock[0]?.MatlWrhsStkQtyInMatlBaseUnit ?? 0
-        r.stockStatus = r.availableStock >= r.quantity ? 'AVAILABLE' : 'SHORTAGE'
-      }
+      const requests = Array.isArray(rows) ? rows : [rows]
+
+      await Promise.all(requests.map(async r => {
+        if (!r?.material || !r.plant) return
+
+        try {
+          const stock = await s4.run(
+            SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
+          )
+          r.availableStock = stock.reduce(
+            (total, item) => total + Number(item.MatlWrhsStkQtyInMatlBaseUnit || 0),
+            0
+          )
+          r.stockStatus = r.availableStock >= Number(r.quantity) ? 'AVAILABLE' : 'SHORTAGE'
+        } catch (error) {
+          // Stock is unknown, not zero, when S/4 rejects a request (for example
+          // because the technical user lacks access to a plant).
+          r.availableStock = null
+          r.stockStatus = 'UNKNOWN'
+        }
+      }))
     })
 
     return super.init()

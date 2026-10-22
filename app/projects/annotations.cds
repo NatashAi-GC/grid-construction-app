@@ -35,9 +35,10 @@ annotate GridService.Projects with @(
 annotate GridService.Projects with {
   name             @title: 'Project Name';
   region           @title: 'Region';
-  voltageLevel     @title: 'Voltage (MW)';
+  voltageLevel     @title: 'Voltage (kV)';
   status           @title: 'Status';
   budget           @title: 'Budget';
+  currency         @title: 'Currency';
   startDate        @title: 'Start Date';
   endDate          @title: 'End Date';
   totalActualHours @title: 'Actual Hours';
