@@ -4,47 +4,102 @@
     "id": "grid.projects",
     "type": "application",
     "title": "Grid Construction Projects",
-    "applicationVersion": { "version": "1.0.0" },
+    "applicationVersion": {
+      "version": "1.0.0"
+    },
     "dataSources": {
       "mainService": {
         "uri": "/odata/v4/grid/",
         "type": "OData",
-        "settings": { "odataVersion": "4.0" }
+        "settings": {
+          "odataVersion": "4.0"
+        }
       }
-    }
+    },
+    "description": "Manage grid construction projects"
   },
   "sap.ui5": {
     "dependencies": {
       "minUI5Version": "1.120.0",
-      "libs": { "sap.m": {}, "sap.ui.core": {}, "sap.fe.templates": {} }
+      "libs": {
+        "sap.m": {},
+        "sap.ui.core": {},
+        "sap.fe.templates": {},
+        "sap.f": {}
+      }
     },
     "models": {
       "": {
         "dataSource": "mainService",
-        "settings": { "operationMode": "Server", "autoExpandSelect": true, "earlyRequests": true }
+        "settings": {
+          "operationMode": "Server",
+          "autoExpandSelect": true,
+          "earlyRequests": true
+        }
       }
     },
     "routing": {
       "routes": [
-        { "pattern": ":?query:", "name": "ProjectsList", "target": "ProjectsList" },
-        { "pattern": "Projects({key}):?query:", "name": "ProjectsObjectPage", "target": "ProjectsObjectPage" }
+        {
+          "pattern": ":?query:",
+          "name": "ProjectsList",
+          "target": "ProjectsList"
+        },
+        {
+          "pattern": "Projects({key}):?query:",
+          "name": "ProjectsObjectPage",
+          "target": "ProjectsObjectPage"
+        }
       ],
       "targets": {
         "ProjectsList": {
           "type": "Component",
           "id": "ProjectsList",
           "name": "sap.fe.templates.ListReport",
-          "options": { "settings": { "contextPath": "/Projects", "navigation": { "Projects": { "detail": { "route": "ProjectsObjectPage" } } } } }
+          "options": {
+            "settings": {
+              "contextPath": "/Projects",
+              "navigation": {
+                "Projects": {
+                  "detail": {
+                    "route": "ProjectsObjectPage"
+                  }
+                }
+              }
+            }
+          }
         },
         "ProjectsObjectPage": {
           "type": "Component",
           "id": "ProjectsObjectPage",
           "name": "sap.fe.templates.ObjectPage",
-          "options": { "settings": { "contextPath": "/Projects" } }
+          "options": {
+            "settings": {
+              "contextPath": "/Projects"
+            }
+          }
         }
+      },
+      "config": {
+        "routerClass": "sap.f.routing.Router"
       }
     },
-    "contentDensities": { "compact": true, "cozy": true }
+    "contentDensities": {
+      "compact": true,
+      "cozy": true
+    },
+    "flexEnabled": false
   },
-  "sap.fiori": { "registrationIds": [], "archeType": "transactional" }
+  "sap.fiori": {
+    "registrationIds": [],
+    "archeType": "transactional"
+  },
+  "sap.ui": {
+    "technology": "UI5",
+    "deviceTypes": {
+      "desktop": true,
+      "tablet": true,
+      "phone": true
+    }
+  }
 }
