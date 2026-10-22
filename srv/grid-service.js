@@ -1,6 +1,6 @@
 const cds = require('@sap/cds')
 
-const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 3, COMPLETED: 1 }
+const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 1, COMPLETED: 3 }
 
 module.exports = class GridService extends cds.ApplicationService {
   async init() {
