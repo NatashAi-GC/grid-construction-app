@@ -36,16 +36,31 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
-    // enrich material requests with the current stock from S/4HANA
+    // Enrich material requests with the current stock from S/4HANA. Look up all
+    // rows concurrently, and isolate failures so one unauthorized plant does not
+    // prevent the rest of the list from being returned.
     this.after('READ', MaterialRequests, async rows => {
-      for (const r of Array.isArray(rows) ? rows : [rows]) {
-        if (!r?.material || !r.plant) continue
-        const stock = await s4.run(
-          SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
-        )
-        r.availableStock = stock[0]?.MatlWrhsStkQtyInMatlBaseUnit ?? 0
-        r.stockStatus = r.availableStock >= r.quantity ? 'AVAILABLE' : 'SHORTAGE'
-      }
+      const requests = Array.isArray(rows) ? rows : [rows]
+
+      await Promise.all(requests.map(async r => {
+        if (!r?.material || !r.plant) return
+
+        try {
+          const stock = await s4.run(
+            SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
+          )
+          r.availableStock = stock.reduce(
+            (total, item) => total + Number(item.MatlWrhsStkQtyInMatlBaseUnit || 0),
+            0
+          )
+          r.stockStatus = r.availableStock >= Number(r.quantity) ? 'AVAILABLE' : 'SHORTAGE'
+        } catch (error) {
+          // Stock is unknown, not zero, when S/4 rejects a request (for example
+          // because the technical user lacks access to a plant).
+          r.availableStock = null
+          r.stockStatus = 'UNKNOWN'
+        }
+      }))
     })
 
     return super.init()
