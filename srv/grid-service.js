@@ -29,7 +29,7 @@ module.exports = class GridService extends cds.ApplicationService {
       const key = req.params[0]
       const ID = typeof key === 'object' ? key.ID : key
       const orders = await db.run(SELECT.from(DbWorkOrders).where({ project_ID: ID }))
-      if (!orders.some(o => o.status === 'COMPLETED')) {
+      if (orders.length === 0 || orders.some(o => o.status !== 'COMPLETED')) {
         return req.reject(409, 'All work orders must be completed before the project can be completed')
       }
       await db.run(UPDATE(DbProjects, ID).set({ status: 'COMPLETED' }))
