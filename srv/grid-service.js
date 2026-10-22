@@ -1,6 +1,6 @@
 const cds = require('@sap/cds')
 
-const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 3, COMPLETED: 1 }
+const CRITICALITY = { PLANNED: 0, IN_PROGRESS: 2, ON_HOLD: 1, COMPLETED: 3 }
 
 module.exports = class GridService extends cds.ApplicationService {
   async init() {
@@ -36,31 +36,38 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
+    this.before(['CREATE', 'UPDATE'], MaterialRequests, req => {
+      if (req.data.quantity === undefined || req.data.quantity === null) return
+
+      const quantity = Number(req.data.quantity)
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return req.reject(400, 'Quantity must be greater than 0')
+      }
+    })
+
     // enrich material requests with the current stock from S/4HANA
     this.after('READ', MaterialRequests, async rows => {
-      for (const r of Array.isArray(rows) ? rows : [rows]) {
-        if (!r?.material || !r.plant) continue
+      const requests = Array.isArray(rows) ? rows : [rows]
+
+      await Promise.all(requests.map(async r => {
+        if (!r?.material || !r.plant) return
 
         try {
           const stock = await s4.run(
             SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
           )
-          // S/4 returns one row per storage location. Add all locations and
-          // convert Decimal values before comparing them with the requested
-          // quantity, since OData may represent them as strings.
           r.availableStock = stock.reduce(
-            (total, entry) => total + Number(entry.MatlWrhsStkQtyInMatlBaseUnit || 0),
+            (total, item) => total + Number(item.MatlWrhsStkQtyInMatlBaseUnit || 0),
             0
           )
           r.stockStatus = r.availableStock >= Number(r.quantity) ? 'AVAILABLE' : 'SHORTAGE'
         } catch (error) {
-          // A failure for one material must not prevent the complete request
-          // list from being returned. The caller can distinguish this from a
-          // real shortage through the UNKNOWN status.
-          r.availableStock = 0
+          // Stock is unknown, not zero, when S/4 rejects a request (for example
+          // because the technical user lacks access to a plant).
+          r.availableStock = null
           r.stockStatus = 'UNKNOWN'
         }
-      }
+      }))
     })
 
     return super.init()
