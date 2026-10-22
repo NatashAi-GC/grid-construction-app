@@ -10,6 +10,15 @@ module.exports = class GridService extends cds.ApplicationService {
     const s4 = await cds.connect.to('API_MATERIAL_STOCK')
     const { MaterialStock } = s4.entities
 
+    this.before(['CREATE', 'UPDATE'], Projects, req => {
+      const { startDate, endDate } = req.data
+      if (startDate === undefined || endDate === undefined || startDate === null || endDate === null) return
+
+      if (new Date(endDate) < new Date(startDate)) {
+        return req.reject(400, 'endDate must not be before startDate')
+      }
+    })
+
     this.after('READ', Projects, rows => {
       for (const p of Array.isArray(rows) ? rows : [rows]) {
         if (p) p.statusCriticality = CRITICALITY[p.status] ?? 0
@@ -54,7 +63,14 @@ module.exports = class GridService extends cds.ApplicationService {
     // project search by name
     this.on('searchProjects', async req => {
       const { term } = req.data
-      const rows = await db.run(`SELECT * FROM grid_Projects WHERE name LIKE '%${term}%'`)
+      if (term === undefined || term === null) return []
+
+      // Build the predicate through CQL instead of interpolating user input into
+      // SQL. Besides preventing injection, this keeps quotes in search terms
+      // valid input rather than turning them into malformed SQL.
+      const rows = await db.run(
+        SELECT.from(DbProjects).where({ name: { like: `%${String(term)}%` } })
+      )
       return rows.map(p => ({ ...p, statusCriticality: CRITICALITY[p.status] ?? 0 }))
     })
 
