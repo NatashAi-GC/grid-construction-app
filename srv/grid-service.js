@@ -51,10 +51,15 @@ module.exports = class GridService extends cds.ApplicationService {
       return this.read(Projects, ID)
     })
 
-    // project search by name
+    // project search by name. Build a CQN so the search term is bound as a
+    // value instead of being interpolated into SQL.
     this.on('searchProjects', async req => {
-      const { term } = req.data
-      const rows = await db.run(`SELECT * FROM grid_Projects WHERE name LIKE '%${term}%'`)
+      const term = String(req.data.term ?? '')
+      const rows = await db.run(
+        SELECT.from(DbProjects)
+          .where({ name: { like: `%${term}%` } })
+          .orderBy('name')
+      )
       return rows.map(p => ({ ...p, statusCriticality: CRITICALITY[p.status] ?? 0 }))
     })
 
