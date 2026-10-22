@@ -40,11 +40,26 @@ module.exports = class GridService extends cds.ApplicationService {
     this.after('READ', MaterialRequests, async rows => {
       for (const r of Array.isArray(rows) ? rows : [rows]) {
         if (!r?.material || !r.plant) continue
-        const stock = await s4.run(
-          SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
-        )
-        r.availableStock = stock[0]?.MatlWrhsStkQtyInMatlBaseUnit ?? 0
-        r.stockStatus = r.availableStock >= r.quantity ? 'AVAILABLE' : 'SHORTAGE'
+
+        try {
+          const stock = await s4.run(
+            SELECT.from(MaterialStock).where({ Material: r.material, Plant: r.plant })
+          )
+          // S/4 returns one row per storage location. Add all locations and
+          // convert Decimal values before comparing them with the requested
+          // quantity, since OData may represent them as strings.
+          r.availableStock = stock.reduce(
+            (total, entry) => total + Number(entry.MatlWrhsStkQtyInMatlBaseUnit || 0),
+            0
+          )
+          r.stockStatus = r.availableStock >= Number(r.quantity) ? 'AVAILABLE' : 'SHORTAGE'
+        } catch (error) {
+          // A failure for one material must not prevent the complete request
+          // list from being returned. The caller can distinguish this from a
+          // real shortage through the UNKNOWN status.
+          r.availableStock = 0
+          r.stockStatus = 'UNKNOWN'
+        }
       }
     })
 
