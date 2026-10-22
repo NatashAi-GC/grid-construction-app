@@ -8,7 +8,7 @@ entity Projects : cuid, managed {
   region           : String(40);
   voltageLevel     : Integer;                 // in kV
   status           : String(20) default 'PLANNED'; // PLANNED, IN_PROGRESS, ON_HOLD, COMPLETED
-  budget           : Decimal(15, 2);
+  budget           : Decimal(15, 2) @Semantics.amount.currencyCode: 'currency';
   currency         : Currency;
   startDate        : Date;
   endDate          : Date;
